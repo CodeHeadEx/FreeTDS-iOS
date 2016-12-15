@@ -1,9 +1,14 @@
 #!/bin/sh
 
 VERSION="1.00.15"
-SDKVERSION="9.3"
-TARGETSDKVERSION="9.0"
+SDKVERSION="0"
+SDKs=($( xcodebuild -showsdks | grep iphoneos| awk -F"iphoneos" '{print $2}' ) )
+SDKsLen=${#SDKs[@]}
+SDKVERSION=${SDKs[SDKsLen - 1]}
 LIB="freetds"
+
+echo 'USE SDK VERSION === ' $SDKVERSION
+
 
 DEVELOPER=`xcode-select -print-path`
 ARCHS="i386 x86_64 armv7 armv7s arm64"
@@ -17,39 +22,45 @@ cd ${LIB}-${VERSION}
 for ARCH in ${ARCHS}
 do
     case "${ARCH}" in
-        "i386"|"x86_64")
-            PLATFORM="iPhoneSimulator"
-            HOST="${ARCH}-apple-darwin11"
-            ;;
-        "arm64")
-            PLATFORM="iPhoneOS"
-            HOST="aarch64-apple-darwin11"
-            ;;
-        *)
-            PLATFORM="iPhoneOS"
-            HOST="${ARCH}-apple-darwin11"
-            ;;
+    "i386")
+        PLATFORM="iPhoneSimulator"
+        HOST="${ARCH}-apple-darwin11"
+        SDK="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer/SDKs/${PLATFORM}${SDKVERSION}.sdk"
+        CFLAGS="-arch ${ARCH} -isysroot ${SDK} -miphoneos-version-min=6.0"
+        ;;
+    "x86_64")
+        PLATFORM="iPhoneSimulator"
+        HOST="${ARCH}-apple-darwin11"
+        SDK="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer/SDKs/${PLATFORM}${SDKVERSION}.sdk"
+        CFLAGS="-arch ${ARCH} -miphoneos-version-min=${SDKVERSION} -isysroot ${SDK}"
+        ;;
+    "arm64")
+        PLATFORM="iPhoneOS"
+        HOST="aarch64-apple-darwin11"
+        SDK="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer/SDKs/${PLATFORM}${SDKVERSION}.sdk"
+        CFLAGS="-arch ${ARCH} -isysroot ${SDK} -miphoneos-version-min=6.0"
+        ;;
+    *)
+        PLATFORM="iPhoneOS"
+        HOST="${ARCH}-apple-darwin11"
+        SDK="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer/SDKs/${PLATFORM}${SDKVERSION}.sdk"
+        CFLAGS="-arch ${ARCH} -isysroot ${SDK} -miphoneos-version-min=6.0"
+        ;;
     esac
 
-    SDK="${DEVELOPER}/Platforms/${PLATFORM}.platform/Developer/SDKs/${PLATFORM}${SDKVERSION}.sdk"
-    export CC="clang"
-    export CFLAGS="-arch ${ARCH} -isysroot ${SDK} -miphoneos-version-min=6.0"
-    export CXXFLAGS="$CFLAGS"
-    export LDFLAGS="$CFLAGS"
-    export LD=$CC
-    # export CFLAGS="-arch ${ARCH} -miphoneos-version-min=${TARGETSDKVERSION} -isysroot ${SDK}"
-    
     PREFIX="${CURRENTPATH}/build/${LIB}/${ARCH}"
-
     mkdir -p ${PREFIX}
-
     echo "Please stand by..."
 
-    ./configure --prefix=$PREFIX --host=${HOST} -build=${BUILD} -with-tdsver=${TDS_VER} CFLAGS="${CFLAGS}"
+    if [ "${ARCH}" == "x86_64" ];
+    then
+        ./configure --prefix=$PREFIX -build=${BUILD} -with-tdsver=${TDS_VER}
+    else
+        ./configure --prefix=$PREFIX --host=${HOST} -build=${BUILD} -with-tdsver=${TDS_VER} CFLAGS="${CFLAGS}"
+    fi
 
     make clean
     make && make install
-
     echo "======== CHECK ARCH ========"
     xcrun -sdk iphoneos lipo -info ${PREFIX}/lib/libsybdb.a
     echo "======== CHECK DONE ========"
@@ -63,9 +74,9 @@ rm -rf ${CURRENTPATH}/build/${LIB}/Fat/lib/*
 
 echo "Build library - libsybdb.a"
 lipo -create ${CURRENTPATH}/build/${LIB}/i386/lib/libsybdb.a  ${CURRENTPATH}/build/${LIB}/armv7/lib/libsybdb.a  ${CURRENTPATH}/build/${LIB}/armv7s/lib/libsybdb.a  ${CURRENTPATH}/build/${LIB}/arm64/lib/libsybdb.a  ${CURRENTPATH}/build/${LIB}/x86_64/lib/libsybdb.a  -output ${CURRENTPATH}/build/${LIB}/Fat/lib/libsybdb.a
-
 echo "======== CHECK FAT ARCH ========"
 xcrun -sdk iphoneos lipo -info ${CURRENTPATH}/build/${LIB}/Fat/lib/libsybdb.a
 echo "======== CHECK DONE ========"
 
 echo "== Done =="
+
